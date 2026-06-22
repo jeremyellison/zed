@@ -1016,16 +1016,9 @@ mod tests {
                 },
             ],
             temperature: Some(0.5),
-            tools: vec![],
-            tool_choice: None,
             thread_id: Some("abcdef".into()),
-            prompt_id: None,
-            intent: None,
-            stop: vec![],
             thinking_allowed: true,
-            thinking_effort: None,
-            speed: Default::default(),
-            compact_at_tokens: None,
+            ..Default::default()
         };
 
         let (mistral_request, affinity) =
@@ -1052,17 +1045,8 @@ mod tests {
                 cache: false,
                 reasoning_details: None,
             }],
-            tools: vec![],
-            tool_choice: None,
-            temperature: None,
-            thread_id: None,
-            prompt_id: None,
-            intent: None,
-            stop: vec![],
             thinking_allowed: true,
-            thinking_effort: None,
-            speed: None,
-            compact_at_tokens: None,
+            ..Default::default()
         };
 
         let (mistral_request, _) = into_mistral(request, mistral::Model::MistralSmallLatest, None);

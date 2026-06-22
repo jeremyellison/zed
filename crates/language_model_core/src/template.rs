@@ -189,12 +189,38 @@ async fn git_remotes(working_dir: &Path) -> String {
         if remote.is_empty() {
             continue;
         }
-        let url = run_git(working_dir, &["remote", "get-url", remote]).await;
+        let url = sanitize_remote_url(&run_git(working_dir, &["remote", "get-url", remote]).await);
         if !url.is_empty() && !urls.iter().any(|existing| existing == &url) {
             urls.push(url);
         }
     }
     urls.join(",")
+}
+
+/// Remove any embedded credentials from a remote URL before it leaves the
+/// machine in a request header.
+///
+/// `git remote get-url` echoes back exactly what is configured, which for HTTP
+/// remotes can include userinfo such as `https://user:token@host/...` or
+/// `https://token@host/...`. We strip the `userinfo@` portion from URLs that use
+/// a `scheme://` form so tokens are never sent to a gateway. SCP-style SSH
+/// addresses (`git@github.com:org/repo.git`) carry only a username (not a
+/// secret) and have no `://`, so they are left untouched.
+fn sanitize_remote_url(url: &str) -> String {
+    let Some(scheme_end) = url.find("://") else {
+        return url.to_string();
+    };
+    let after_scheme_start = scheme_end + 3;
+    let (scheme, rest) = url.split_at(after_scheme_start);
+    // Userinfo, if present, ends at the first `@` before the path/query/fragment
+    // begins. Only treat an `@` as a userinfo separator when it precedes the
+    // authority's terminators.
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+    let Some(at) = authority.rfind('@') else {
+        return url.to_string();
+    };
+    format!("{scheme}{}", &rest[at + 1..])
 }
 
 fn expand_env(spec: &str) -> String {
@@ -248,6 +274,19 @@ async fn run_git(working_dir: &Path, args: &[&str]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    /// Serializes tests that mutate process-global environment variables.
+    /// Rust runs tests in parallel within one process, so concurrent
+    /// `set_var`/`remove_var` calls would race; every env-touching test must
+    /// hold this guard for its whole body.
+    static ENV_GUARD: Mutex<()> = Mutex::new(());
+
+    fn env_guard() -> MutexGuard<'static, ()> {
+        ENV_GUARD
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     fn ctx() -> TemplateContext {
         TemplateContext::default()
@@ -264,7 +303,8 @@ mod tests {
 
     #[test]
     fn expands_env_var() {
-        // SAFETY: test-local env var, single-threaded within this test.
+        let _guard = env_guard();
+        // SAFETY: env mutation is serialized by `_guard` for the whole test.
         unsafe { std::env::set_var("ZED_TEMPLATE_TEST_VAR", "test_value") };
         assert_eq!(
             smol::block_on(expand_template("${env:ZED_TEMPLATE_TEST_VAR}", &ctx())),
@@ -275,6 +315,8 @@ mod tests {
 
     #[test]
     fn unset_env_var_expands_to_empty() {
+        let _guard = env_guard();
+        // SAFETY: env mutation is serialized by `_guard` for the whole test.
         unsafe { std::env::remove_var("ZED_TEMPLATE_DEFINITELY_UNSET") };
         assert_eq!(
             smol::block_on(expand_template(
@@ -287,6 +329,8 @@ mod tests {
 
     #[test]
     fn env_var_default_used_when_unset() {
+        let _guard = env_guard();
+        // SAFETY: env mutation is serialized by `_guard` for the whole test.
         unsafe { std::env::remove_var("ZED_TEMPLATE_DEFINITELY_UNSET") };
         assert_eq!(
             smol::block_on(expand_template(
@@ -299,6 +343,8 @@ mod tests {
 
     #[test]
     fn env_var_default_ignored_when_set() {
+        let _guard = env_guard();
+        // SAFETY: env mutation is serialized by `_guard` for the whole test.
         unsafe { std::env::set_var("ZED_TEMPLATE_SET_VAR", "actual") };
         assert_eq!(
             smol::block_on(expand_template(
@@ -312,6 +358,8 @@ mod tests {
 
     #[test]
     fn mixed_literal_and_template() {
+        let _guard = env_guard();
+        // SAFETY: env mutation is serialized by `_guard` for the whole test.
         unsafe { std::env::set_var("ZED_TEMPLATE_USER", "alice") };
         assert_eq!(
             smol::block_on(expand_template(
@@ -375,5 +423,40 @@ mod tests {
         let context = TemplateContext::new(Some(cwd));
         let branch = smol::block_on(expand_template("${git:branch}", &context));
         assert!(!branch.contains('\n'));
+    }
+
+    #[test]
+    fn sanitize_remote_url_strips_credentials() {
+        // user:password and bare-token userinfo are removed.
+        assert_eq!(
+            sanitize_remote_url("https://user:ghp_secret@github.com/org/repo.git"),
+            "https://github.com/org/repo.git"
+        );
+        assert_eq!(
+            sanitize_remote_url("https://ghp_secret@github.com/org/repo.git"),
+            "https://github.com/org/repo.git"
+        );
+        // Other schemes are handled too.
+        assert_eq!(
+            sanitize_remote_url("ssh://git:secret@example.com:22/org/repo.git"),
+            "ssh://example.com:22/org/repo.git"
+        );
+
+        // No credentials -> unchanged.
+        assert_eq!(
+            sanitize_remote_url("https://github.com/org/repo.git"),
+            "https://github.com/org/repo.git"
+        );
+        // SCP-style SSH has no `://`; the `git@` username is not a secret and is
+        // left intact.
+        assert_eq!(
+            sanitize_remote_url("git@github.com:org/repo.git"),
+            "git@github.com:org/repo.git"
+        );
+        // An `@` that appears only in the path must not be treated as userinfo.
+        assert_eq!(
+            sanitize_remote_url("https://github.com/org/repo@v1.git"),
+            "https://github.com/org/repo@v1.git"
+        );
     }
 }

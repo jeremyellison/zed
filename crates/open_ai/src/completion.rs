@@ -1450,6 +1450,7 @@ mod tests {
             thinking_effort: Some("high".into()),
             speed: None,
             compact_at_tokens: None,
+            project_root: None,
         };
 
         let response = into_open_ai_response(
@@ -1572,6 +1573,7 @@ mod tests {
             thinking_effort: None,
             speed: None,
             compact_at_tokens: None,
+            project_root: None,
         };
 
         let response = into_open_ai_response(
@@ -1655,6 +1657,7 @@ mod tests {
             thinking_effort: None,
             speed: None,
             compact_at_tokens: None,
+            project_root: None,
         };
 
         let response =
@@ -1712,6 +1715,7 @@ mod tests {
             thinking_effort: Some("high".into()),
             speed: None,
             compact_at_tokens: None,
+            project_root: None,
         };
 
         let response = into_open_ai_response(
@@ -1756,6 +1760,7 @@ mod tests {
                 thinking_effort: None,
                 speed,
                 compact_at_tokens: None,
+                project_root: None,
             };
 
             let response = into_open_ai_response(request, "gpt-5.4", true, true, None, None, true);
@@ -1798,6 +1803,7 @@ mod tests {
                 thinking_effort: None,
                 speed,
                 compact_at_tokens: None,
+                project_root: None,
             };
 
             let chat = into_open_ai(request, "gpt-5.4", true, true, None, None, false);
@@ -1834,6 +1840,7 @@ mod tests {
             thinking_effort: Some("high".into()),
             speed: None,
             compact_at_tokens: None,
+            project_root: None,
         };
 
         let response = into_open_ai_response(
@@ -1873,6 +1880,7 @@ mod tests {
             thinking_effort: Some("none".into()),
             speed: None,
             compact_at_tokens: None,
+            project_root: None,
         };
 
         let response = into_open_ai_response(
@@ -1924,6 +1932,7 @@ mod tests {
             thinking_effort: None,
             speed: None,
             compact_at_tokens: None,
+            project_root: None,
         };
 
         let response = into_open_ai_response(
@@ -2014,6 +2023,7 @@ mod tests {
             thinking_effort: None,
             speed: None,
             compact_at_tokens: None,
+            project_root: None,
         };
 
         let response = into_open_ai_response(
@@ -2102,6 +2112,7 @@ mod tests {
             thinking_effort: None,
             speed: None,
             compact_at_tokens: None,
+            project_root: None,
         };
 
         let response =
@@ -3159,6 +3170,7 @@ mod tests {
             thinking_effort: None,
             speed: None,
             compact_at_tokens: None,
+            project_root: None,
         };
 
         let result = into_open_ai(request.clone(), "model", false, false, None, None, true);
